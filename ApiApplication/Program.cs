@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -16,11 +15,13 @@ namespace ApiApplication
             Host.CreateDefaultBuilder(args)
                 .ConfigureWebHostDefaults(webBuilder =>
                 {
-                    webBuilder.ConfigureLogging(options =>
+                    webBuilder.ConfigureLogging(logging =>
                     {
-                        options.AddConsole();
+                        logging.ClearProviders();
+                        logging.AddConsole();
+                        logging.SetMinimumLevel(LogLevel.Information);
                     });
-                    webBuilder.UseStartup<Startup>();                    
+                    webBuilder.UseStartup<Startup>();
                 });
     }
 }

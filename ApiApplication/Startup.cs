@@ -8,6 +8,8 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using System;
 
 namespace ApiApplication
 {
@@ -20,12 +22,19 @@ namespace ApiApplication
 
         public IConfiguration Configuration { get; }
 
-        // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
+            services.AddStackExchangeRedisCache(options =>
+            {
+                options.Configuration = Configuration.GetConnectionString("RedisConnection");
+                options.InstanceName = "Cinema_";
+            });
+            services.AddLogging();
             services.AddTransient<IShowtimesRepository, ShowtimesRepository>();
             services.AddTransient<ITicketsRepository, TicketsRepository>();
             services.AddTransient<IAuditoriumsRepository, AuditoriumsRepository>();
+            services.AddTransient<IReservationsRepository, ReservationsRepository>();
+            services.AddScoped<IApiClientGrpc, ApiClientGrpc>();
 
             services.AddDbContext<CinemaContext>(options =>
             {
@@ -33,13 +42,28 @@ namespace ApiApplication
                     .EnableSensitiveDataLogging()
                     .ConfigureWarnings(b => b.Ignore(InMemoryEventId.TransactionIgnoredWarning));
             });
+
+            services.AddHttpClient("ProvidedApi", client =>
+            {
+                client.BaseAddress = new Uri("http://localhost:7172"); 
+                client.DefaultRequestHeaders.Add("Accept", "application/json");
+                client.DefaultRequestHeaders.Add("X-ApiKey", "68e5fbda-9ec9-4858-97b2-4a8349764c63"); 
+            });
+
             services.AddControllers();
 
-            services.AddHttpClient();
+            services.AddSwaggerGen(c =>
+            {
+                c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+                {
+                    Version = "v1",
+                    Title = "Cinema API",
+                    Description = "API for managing cinema showtimes, reservations, and ticket purchases"
+                });
+            });
         }
 
-        // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+        public void Configure(IApplicationBuilder app, IWebHostEnvironment env, ILogger<Startup> logger)
         {
             if (env.IsDevelopment())
             {
@@ -47,10 +71,18 @@ namespace ApiApplication
             }
 
             app.UseHttpsRedirection();
-
+            app.UseMiddleware<Logger>();
             app.UseRouting();
             app.UseAuthentication();
             app.UseAuthorization();
+
+            app.Use(async (context, next) =>
+            {
+                var startTime = DateTime.UtcNow;
+                await next.Invoke();
+                var duration = DateTime.UtcNow - startTime;
+                logger.LogInformation($"Request [{context.Request.Method}] {context.Request.Path} took {duration.TotalMilliseconds} ms");
+            });
 
             app.UseEndpoints(endpoints =>
             {
@@ -58,6 +90,13 @@ namespace ApiApplication
             });
 
             SampleData.Initialize(app);
-        }      
+
+            app.UseSwagger();
+            app.UseSwaggerUI(c =>
+            {
+                c.SwaggerEndpoint("/swagger/v1/swagger.json", "Cinema API V1");
+                c.RoutePrefix = string.Empty; 
+            });
+        }
     }
 }

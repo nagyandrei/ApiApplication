@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 
 namespace ApiApplication.Database.Entities
 {
@@ -11,6 +12,8 @@ namespace ApiApplication.Database.Entities
         public string ImdbId { get; set; }
         public string Stars { get; set; }
         public DateTime ReleaseDate { get; set; }
+        [JsonIgnore]
+
         public List<ShowtimeEntity> Showtimes { get; set; }
     }
 }

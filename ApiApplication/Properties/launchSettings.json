@@ -8,18 +8,19 @@
     "ApiApplication": {
       "commandName": "Project",
       "launchBrowser": true,
-      "launchUrl": "showtime",
+      "launchUrl": "", 
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development" 
       },
-      "applicationUrl": "https://localhost:7629;http://localhost:7628"
+      "applicationUrl": "https://localhost:7629;http://localhost:7628" 
     },
     "Docker": {
       "commandName": "Docker",
       "launchBrowser": true,
-      "launchUrl": "{Scheme}://{ServiceHost}:{ServicePort}/showtime",
+      "launchUrl": "{Scheme}://{ServiceHost}:{ServicePort}", 
       "publishAllPorts": true,
       "useSSL": true
     }
   }
 }
+
