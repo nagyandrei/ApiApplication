@@ -38,6 +38,7 @@ namespace ApiApplication.Database.Repositories
         {
             return await _context.Tickets
                 .Where(t => t.Seats.Any(seat => seat.AuditoriumId == auditoriumId) && t.Paid)
+                .Include(x => x.Seats)
                 .ToListAsync(cancel);
         }
 

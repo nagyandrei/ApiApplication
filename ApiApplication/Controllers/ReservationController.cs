@@ -7,10 +7,11 @@ using System.Threading.Tasks;
 using ApiApplication.Database.Entities;
 using ApiApplication.Database.Repositories.Abstractions;
 using ApiApplication.Helpers;
+using Microsoft.Extensions.Configuration;
 
 namespace ApiApplication.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("api/reservation")]
     [ApiController]
     public class ReservationController : ControllerBase
     {
@@ -18,49 +19,59 @@ namespace ApiApplication.Controllers
         private readonly IShowtimesRepository _showtimesRepository;
         private readonly IAuditoriumsRepository _auditoriumsRepository;
         private readonly IReservationsRepository _reservationsRepository;
+        private readonly int _reservationThresholdMinutes;
 
         public ReservationController(
             ITicketsRepository ticketsRepository,
             IShowtimesRepository showtimesRepository,
             IAuditoriumsRepository auditoriumsRepository,
-            IReservationsRepository reservationsRepository)
+            IReservationsRepository reservationsRepository,
+            IConfiguration configuration)
         {
             _ticketsRepository = ticketsRepository;
             _showtimesRepository = showtimesRepository;
             _auditoriumsRepository = auditoriumsRepository;
             _reservationsRepository = reservationsRepository;
+            _reservationThresholdMinutes = GenericHelper.TryParseValue(configuration["ApiSettings:ReservationThresholdMinutes"]);
         }
 
         [HttpGet("{id}")]
-        public async Task<IActionResult> GetReservationById(Guid id)
+        public async Task<IActionResult> GetReservationById(Guid id, CancellationToken cancellationToken)
         {
-            var reservation = await _reservationsRepository.GetAsync(id, HttpContext.RequestAborted);
-
-            if (reservation == null)
+            try
             {
-                return NotFound("Reservation not found.");
+                var reservation = await _reservationsRepository.GetAsync(id, cancellationToken);
+
+                if (reservation == null)
+                {
+                    return NotFound("Reservation not found.");
+                }
+
+                var ticket = await _ticketsRepository.GetAsync(reservation.TicketId, cancellationToken);
+
+                if (ticket == null)
+                {
+                    return NotFound("Ticket not found.");
+                }
+
+                if (ticket.CreatedTime.AddMinutes(_reservationThresholdMinutes) <= DateTime.Now)
+                {
+                    return Conflict($"Reservation found but it has expired. Reservation CreatedTime {ticket.CreatedTime}");
+                }
+
+                return Ok(new
+                {
+                    reservation.Id,
+                    reservation.NoOfSeats,
+                    reservation.AuditoriumId,
+                    reservation.Movie.Title,
+                    ticket.Seats
+                });
             }
-
-            var ticket = await _ticketsRepository.GetAsync(reservation.TicketId, HttpContext.RequestAborted);
-
-            if (ticket == null)
+            catch (Exception ex)
             {
-                return NotFound("Ticket not found.");
+                return StatusCode(500, $"Internal server error: {ex.Message}");
             }
-
-            if (ticket.CreatedTime.AddMinutes(10) <= DateTime.Now)
-            {
-                return Conflict($"Reservation found but it has expired. Resercation CreatedTime {ticket.CreatedTime}");
-            }
-
-            return Ok(new
-            {
-                reservation.Id,
-                reservation.NoOfSeats,
-                reservation.AuditoriumId,
-                reservation.Movie.Title,
-                ticket.Seats
-            });
         }
 
         [HttpPost]
@@ -101,18 +112,9 @@ namespace ApiApplication.Controllers
 
                 var reservedTickets = await _ticketsRepository.GetEnrichedAsync(request.ShowtimeId, cancellationToken);
 
-                var activeReservedSeats = reservedTickets
-                    .Where(x => x.CreatedTime.AddMinutes(10) >= DateTime.Now)  
-                    .SelectMany(ticket => ticket.Seats) 
-                    .ToList();
-
-                var conflictingSeats = activeReservedSeats
-                    .Where(seat => request.Seats.Contains(seat.SeatNumber))
-                    .ToList();
-
-                if (conflictingSeats.Any())
+                if (!TicketHelper.CanReserveSeats(request,reservedTickets, _reservationThresholdMinutes))
                 {
-                    return Conflict("Some seats are already reserved.");
+                    return Conflict("Some seats are already reserved or paid for.");
                 }
 
                 var ticket = await _ticketsRepository.CreateAsync(showtime, seats, cancellationToken);
@@ -123,7 +125,7 @@ namespace ApiApplication.Controllers
                     NoOfSeats = request.Seats.Count,
                     Auditorium = auditorium,
                     Movie = showtime.Movie,
-                    CreatedTime = DateTime.UtcNow,
+                    CreatedTime = DateTime.Now,
                     TicketId = ticket.Id
                 };
 
@@ -131,6 +133,7 @@ namespace ApiApplication.Controllers
 
                 return Ok(new
                 {
+                    message = $"Reservation successfully created, it is available for {_reservationThresholdMinutes} minutes.",
                     reservation.Id,
                     reservation.NoOfSeats,
                     reservation.AuditoriumId,
@@ -139,42 +142,43 @@ namespace ApiApplication.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, ex.Message);
+                return StatusCode(500, $"Internal server error: {ex.Message}");
             }
         }
 
         [HttpPost("confirm/{reservationId}")]
         public async Task<IActionResult> ConfirmReservation(Guid reservationId, CancellationToken cancellationToken)
         {
-            var reservation = await _reservationsRepository.GetAsync(reservationId, cancellationToken);
-
-            if (reservation == null)
-            {
-                return NotFound("Reservation not found.");
-            }
-
-            var ticket = await _ticketsRepository.GetAsync(reservation.TicketId, cancellationToken);
-
-            if (ticket == null)
-            {
-                return NotFound("Ticket not found.");
-            }
-
-            if (DateTime.UtcNow - reservation.CreatedTime > TimeSpan.FromMinutes(10))
-            {
-                return BadRequest("Reservation has expired.");
-            }
-
-            var auditoriumId = ticket.Seats.First().AuditoriumId;
-            var paidTickets = await _ticketsRepository.GetPaidTicketsByAuditoriumAsync(auditoriumId, cancellationToken);
-
-            if (!TicketHelper.TicketsCanBeBought(ticket, paidTickets))
-            {
-                return Conflict("Some seats are already bought.");
-            }
-
             try
             {
+                var reservation = await _reservationsRepository.GetAsync(reservationId, cancellationToken);
+
+                if (reservation == null)
+                {
+                    return NotFound("Reservation not found.");
+                }
+
+                var ticket = await _ticketsRepository.GetAsync(reservation.TicketId, cancellationToken);
+
+                if (ticket == null)
+                {
+                    return NotFound("Ticket not found.");
+                }
+
+                if (DateTime.Now - reservation.CreatedTime > TimeSpan.FromMinutes(_reservationThresholdMinutes))
+                {
+                    return BadRequest("Reservation has expired.");
+                }
+
+                var auditoriumId = ticket.Seats.First().AuditoriumId;
+                var paidTickets = await _ticketsRepository.GetPaidTicketsByAuditoriumAsync(auditoriumId, cancellationToken);
+
+                if (!TicketHelper.CanConfirmReservation(ticket, paidTickets))
+                {
+                    return Conflict("Some seats are already bought.");
+                }
+
+
                 await _ticketsRepository.ConfirmPaymentAsync(ticket, cancellationToken);
 
                 return Ok(new

@@ -5,12 +5,12 @@ using System.Threading.Tasks;
 
 namespace ApiApplication
 {
-    public class Logger
+    public class LoggerMiddleware
     {
         private readonly RequestDelegate _next;
-        private readonly ILogger<Logger> _logger;
+        private readonly ILogger<LoggerMiddleware> _logger;
 
-        public Logger(RequestDelegate next, ILogger<Logger> logger)
+        public LoggerMiddleware(RequestDelegate next, ILogger<LoggerMiddleware> logger)
         {
             _next = next;
             _logger = logger;
@@ -25,8 +25,10 @@ namespace ApiApplication
 
             stopwatch.Stop();
 
-            var executionTime = stopwatch.ElapsedMilliseconds;
-            _logger.LogInformation($"Request [{context.Request.Method}] {context.Request.Path} took {executionTime} ms.");
+            var executionTime = stopwatch.Elapsed.TotalSeconds;
+            var formattedTime = executionTime < 1 ? $"{stopwatch.ElapsedMilliseconds} ms" : $"{executionTime:F2} seconds";
+
+            _logger.LogInformation($"Request [{context.Request.Method}] {context.Request.Path} took {formattedTime}.");
         }
     }
 }

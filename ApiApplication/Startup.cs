@@ -47,7 +47,6 @@ namespace ApiApplication
             {
                 client.BaseAddress = new Uri("http://localhost:7172"); 
                 client.DefaultRequestHeaders.Add("Accept", "application/json");
-                client.DefaultRequestHeaders.Add("X-ApiKey", "68e5fbda-9ec9-4858-97b2-4a8349764c63"); 
             });
 
             services.AddControllers();
@@ -71,18 +70,10 @@ namespace ApiApplication
             }
 
             app.UseHttpsRedirection();
-            app.UseMiddleware<Logger>();
+            app.UseMiddleware<LoggerMiddleware>();
             app.UseRouting();
             app.UseAuthentication();
             app.UseAuthorization();
-
-            app.Use(async (context, next) =>
-            {
-                var startTime = DateTime.UtcNow;
-                await next.Invoke();
-                var duration = DateTime.UtcNow - startTime;
-                logger.LogInformation($"Request [{context.Request.Method}] {context.Request.Path} took {duration.TotalMilliseconds} ms");
-            });
 
             app.UseEndpoints(endpoints =>
             {

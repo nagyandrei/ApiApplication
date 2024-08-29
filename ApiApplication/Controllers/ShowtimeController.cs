@@ -8,7 +8,7 @@ using ApiApplication.Database.Entities;
 
 namespace ApiApplication.Controllers
 {
-    [Route("api/showtimes")]
+    [Route("api/showtime")]
     [ApiController]
     public class ShowtimeController : ControllerBase
     {
@@ -26,43 +26,44 @@ namespace ApiApplication.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateShowtime([FromBody] CreateShowtimeRequest request, CancellationToken cancellationToken)
         {
-            if (request == null)
-            {
-                return BadRequest("Invalid data.");
-            }
-
-            var auditorium = await _auditoriumsRepository.GetAsync(request.AuditoriumId, cancellationToken);
-            if (auditorium == null)
-            {
-                return NotFound("Auditorium not found.");
-            }
-
-            var movie = await _apiClientGrpc.GetById(request.MovieId);
-            if (movie == null)
-            {
-                return NotFound("Movie not found.");
-            }
-
-            var showtime = new ShowtimeEntity
-            {
-                SessionDate = request.SessionDate,
-                AuditoriumId = request.AuditoriumId,
-                Movie = new MovieEntity
-                {
-                    Id = Convert.ToInt32(movie.Rank),
-                    Title = movie.FullTitle,
-                    ImdbId = movie.Id,
-                    Stars = movie.Crew,
-                    ReleaseDate = DateTime.ParseExact(movie.Year, "yyyy", null)
-                },
-                Tickets = new List<TicketEntity>() 
-            };
-
             try
             {
+                if (request == null)
+                {
+                    return BadRequest("Invalid data.");
+                }
+
+                var auditorium = await _auditoriumsRepository.GetAsync(request.AuditoriumId, cancellationToken);
+                if (auditorium == null)
+                {
+                    return NotFound("Auditorium not found.");
+                }
+
+                var movie = await _apiClientGrpc.GetById(request.MovieId);
+                if (movie == null)
+                {
+                    return NotFound("Movie not found.");
+                }
+
+                var showtime = new ShowtimeEntity
+                {
+                    SessionDate = request.SessionDate,
+                    AuditoriumId = request.AuditoriumId,
+                    Movie = new MovieEntity
+                    {
+                        Id = Convert.ToInt32(movie.Rank),
+                        Title = movie.FullTitle,
+                        ImdbId = movie.Id,
+                        Stars = movie.Crew,
+                        ReleaseDate = DateTime.ParseExact(movie.Year, "yyyy", null)
+                    },
+                    Tickets = new List<TicketEntity>()
+                };
+
                 var createdShowtime = await _showtimeRepository.CreateShowtime(showtime, cancellationToken);
                 return Ok(new
                 {
+                    message = $"Showtime successfully created.",
                     createdShowtime.Id,
                     createdShowtime.SessionDate,
                     createdShowtime.AuditoriumId,
@@ -85,20 +86,27 @@ namespace ApiApplication.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, ex.Message);
+                return StatusCode(500, $"Internal server error: {ex.Message}");
             }
         }
 
         [HttpGet("{id}")]
         public async Task<IActionResult> GetShowtimeById(int id, CancellationToken cancellationToken)
         {
-            var showtime = await _showtimeRepository.GetWithMoviesByIdAsync(id, cancellationToken);
-            if (showtime != null)
+            try
             {
-                return Ok(showtime);
-            }
+                var showtime = await _showtimeRepository.GetWithMoviesByIdAsync(id, cancellationToken);
+                if (showtime != null)
+                {
+                    return Ok(showtime);
+                }
 
-            return NotFound("Showtime not found.");
+                return NotFound("Showtime not found.");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Internal server error: {ex.Message}");
+            }
         }
     }
 

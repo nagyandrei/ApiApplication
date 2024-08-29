@@ -1,2 +1,37 @@
-Please add the cURLs of your tests here:
+# --------------------------
+# ReservationController
+# --------------------------
 
+# 1. GET /api/reservation/{id}
+curl -X GET "https://localhost:7629/api/reservation/{reservationId}" -H "accept: application/json"
+
+# 2. POST /api/reservation
+curl -X POST "https://localhost:7629/api/reservation" -H "accept: */*" -H "Content-Type: application/json" -d "{\"showtimeId\": 1, \"seatRow\": 1, \"seats\": [1,2,3]}"
+
+# 3. POST /api/reservation/confirm/{reservationId}
+curl -X POST "https://localhost:7629/api/reservation/confirm/{reservationId}" -H "accept: */*" -d ""
+
+
+# --------------------------
+# ShowtimeController
+# --------------------------
+
+# 4. POST /api/showtime
+curl -X POST "https://localhost:7629/api/showtime" -H "accept: */*" -H "Content-Type: application/json" -d "{\"sessionDate\": \"2024-08-29T10:03:45.385Z\", \"auditoriumId\": 1, \"movieId\": \"tt0133093\"}"
+
+# 5. GET /api/showtime
+curl -X GET "https://localhost:7629/api/showtime" -H "accept: application/json"
+
+# 6. GET /api/showtime/{id}
+curl -X GET "https://localhost:7629/api/showtime/{id}" -H "accept: application/json"
+
+
+# --------------------------
+# MoviesController
+# --------------------------
+
+# 7. GET /api/movies
+curl -X GET "https://localhost:7629/api/Movies" -H "accept: application/json"
+
+# 8. GET /api/movies/{id}
+curl -X GET "https://localhost:7629/api/movies/{id}" -H "accept: application/json"

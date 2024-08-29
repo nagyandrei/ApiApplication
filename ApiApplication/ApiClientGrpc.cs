@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using ApiApplication.Database.Repositories.Abstractions;
+using ApiApplication.Helpers;
 using Grpc.Core;
 using Grpc.Net.Client;
 using Microsoft.Extensions.Caching.Distributed;
@@ -17,12 +18,14 @@ namespace ApiApplication
         private readonly IDistributedCache _cache;
         private readonly string _apiBaseUrl;
         private readonly string _apiKey;
+        private readonly int _cacheExpirationMinutes;
 
         public ApiClientGrpc(IDistributedCache cache, IConfiguration configuration)
         {
             _cache = cache;
             _apiBaseUrl = configuration["ApiSettings:ProvidedApiBaseUrl"];
             _apiKey = configuration["ApiSettings:ApiKey"];
+            _cacheExpirationMinutes = GenericHelper.TryParseValue(configuration["ApiSettings:CacheExpirationMinutes"]);
         }
 
         private async Task<GrpcChannel> CreateChannelAsync()
@@ -64,7 +67,7 @@ namespace ApiApplication
                 var serializedData = JsonConvert.SerializeObject(data);
                 await _cache.SetStringAsync(cacheKey, serializedData, new DistributedCacheEntryOptions
                 {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(_cacheExpirationMinutes)
                 });
 
                 return data;
@@ -101,7 +104,7 @@ namespace ApiApplication
                 var serializedData = JsonConvert.SerializeObject(data);
                 await _cache.SetStringAsync(cacheKey, serializedData, new DistributedCacheEntryOptions
                 {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(_cacheExpirationMinutes)
                 });
 
                 return data;

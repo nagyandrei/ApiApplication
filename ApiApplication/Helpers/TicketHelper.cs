@@ -1,7 +1,11 @@
 ﻿using ApiApplication.Database.Entities;
+using Microsoft.EntityFrameworkCore.Internal;
+using ProtoDefinitions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Sockets;
+using static ApiApplication.Controllers.ReservationController;
 
 namespace ApiApplication.Helpers
 {
@@ -32,27 +36,30 @@ namespace ApiApplication.Helpers
             return true;
         }
 
-        public static bool TicketsCanBeBought(TicketEntity ticket, IEnumerable<TicketEntity> paidTickets)
+        public static bool CanReserveSeats(ReserveSeatsRequest request, IEnumerable<TicketEntity> reservedTickets, int reservationThreshold)
         {
-            var paidSeats = paidTickets
-                            .SelectMany(t => t.Seats)
-                            .Select(seat => new { seat.Row, seat.SeatNumber })
-                            .ToList();
+            var activeReservedTickets = reservedTickets
+                                .Where(ticket => ticket.CreatedTime.AddMinutes(reservationThreshold) >= DateTime.Now || ticket.Paid)
+                                .ToList();
 
-            var reservedSeats = ticket.Seats
-                .Select(seat => new { seat.Row, seat.SeatNumber })
+            var conflictingSeats = activeReservedTickets
+                .SelectMany(ticket => ticket.Seats)
+                .Where(seat => request.Seats.Contains(seat.SeatNumber))
                 .ToList();
 
-            return !reservedSeats
-                .Any(reservedSeat => paidSeats
-                    .Any(paidSeat => reservedSeat.Row == paidSeat.Row && reservedSeat.SeatNumber == paidSeat.SeatNumber));
+            return !conflictingSeats.Any();
         }
 
-        public static bool CanTicketBeBought(TicketEntity ticket)
+        public static bool CanConfirmReservation(TicketEntity ticket, IEnumerable<TicketEntity> paidTickets)
         {
-            if (ticket == null) throw new ArgumentNullException(nameof(ticket));
-            return ticket.Paid || (DateTime.UtcNow - ticket.CreatedTime).TotalMinutes < 10;
+            var conflictingSeats = paidTickets
+                .SelectMany(t => t.Seats)
+                .Where(seat => ticket.Seats.Select(s => s.SeatNumber).Contains(seat.SeatNumber))
+                .ToList();
+
+            return !conflictingSeats.Any();
         }
+        
     }
 }
 
